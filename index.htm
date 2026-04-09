@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>旋律創作器 - 藍田循道衞理小學</title>
+<title>旋律創作器 Pro Max - 藍田循道衞理小學</title>
 
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
@@ -33,6 +33,10 @@
     justify-content: center;
     align-items: center;
     overflow-x: hidden;
+    /* 防止在手機上長按選取文字或觸發右鍵選單 */
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   /* --- 主選單 --- */
@@ -138,7 +142,8 @@
     width: 100%; overflow-x: auto; padding-bottom: 15px; margin-bottom: 20px;
     scrollbar-width: thin; scrollbar-color: var(--accent) transparent;
     display: flex; justify-content: center;
-    user-select: none; 
+    /* 確保手機滑動網格區塊的順暢度 */
+    touch-action: pan-x; 
   }
 
   #grid { display: grid; gap: 8px; width: max-content; }
@@ -150,6 +155,8 @@
     font-weight: bold; font-size: calc(var(--cell-size) * 0.35); 
     color: rgba(255, 255, 255, 0.1); transition: 0.1s;
     position: relative;
+    /* 防止手機預設點擊反白或滑動 */
+    touch-action: none; 
   }
 
   .cell:hover { background: rgba(255, 255, 255, 0.15); }
@@ -384,7 +391,7 @@
   let isDragging = false;
   let dragStartNote = null;
   let dragMode = 'add'; 
-  let currentGroupId = null; // 用於區分是同一筆畫的長音，還是單獨點擊的短音
+  let currentGroupId = null;
 
   function getLength() {
     const sel = document.getElementById('length-select').value;
@@ -454,27 +461,34 @@
         cell.dataset.row = r;
         cell.innerText = noteName;
         
+        // 滑鼠事件
         cell.addEventListener('mousedown', (e) => startDrag(cell, e));
         cell.addEventListener('mouseenter', () => continueDrag(cell));
+        
+        // 手機觸控事件 (點擊開始)
+        cell.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // 防止手機預設行為 (如畫面捲動)
+            startDrag(cell, e);
+        }, { passive: false });
         
         gridEl.appendChild(cell);
         cells.push(cell);
       }
     }
 
+    // 全域滑鼠與觸控結束事件
     window.addEventListener('mouseup', endDrag, { once: false });
+    window.addEventListener('touchend', endDrag, { once: false });
+    window.addEventListener('touchcancel', endDrag, { once: false });
 
-    // 載入先前的記錄，並兼容舊版沒有 Group ID 的資料
+    // 載入先前的記錄
     if (savedCells) {
-      // 確保順序是由左到右
       savedCells.sort((a,b) => a.col - b.col);
-      
       let lastNote = null;
       let lastGroup = null;
       let lastCol = -2;
 
       savedCells.forEach(sc => {
-        // 舊版兼容邏輯：如果沒有群組ID，但它跟上一格是同音且相鄰，則視為同一個長音群組
         if (!sc.group) {
            if (sc.note === lastNote && sc.col === lastCol + 1) {
                sc.group = lastGroup; 
@@ -489,14 +503,28 @@
         const cell = cells.find(c => parseInt(c.dataset.col) === sc.col && c.dataset.note === sc.note);
         if (cell) {
             cell.classList.add('active');
-            cell.dataset.group = sc.group; // 賦予群組ID
+            cell.dataset.group = sc.group;
         }
       });
       updateTies();
     }
   }
 
-  // --- 拖曳繪圖邏輯 (加入群組 ID 判定) ---
+  // --- 觸控滑動繪圖核心 (Touch Move) ---
+  // 將 touchmove 綁定在 grid 上，並透過座標抓取當前手指下方的 cell
+  gridEl.addEventListener('touchmove', (e) => {
+    if (!isDragging) return;
+    e.preventDefault(); // 拖曳畫音符時防止畫面滾動
+
+    const touch = e.touches[0];
+    const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
+    
+    if (targetElement && targetElement.classList.contains('cell')) {
+      continueDrag(targetElement);
+    }
+  }, { passive: false });
+
+  // --- 拖曳繪圖邏輯 ---
   function startDrag(cell, e) {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -507,10 +535,10 @@
     if (cell.classList.contains('active')) {
       dragMode = 'remove';
       cell.classList.remove('active');
-      delete cell.dataset.group; // 清除 ID
+      delete cell.dataset.group;
     } else {
       dragMode = 'add';
-      currentGroupId = Date.now().toString() + Math.random().toString(); // 產生全新的一筆畫 ID
+      currentGroupId = Date.now().toString() + Math.random().toString();
       
       cells.filter(c => c.dataset.col === cell.dataset.col && c !== cell).forEach(c => {
           c.classList.remove('active');
@@ -518,7 +546,7 @@
       });
       
       cell.classList.add('active');
-      cell.dataset.group = currentGroupId; // 賦予這一筆畫專屬 ID
+      cell.dataset.group = currentGroupId; 
       playTone(freqTable[cell.dataset.note], 0.2); 
     }
     updateTies();
@@ -533,7 +561,7 @@
           delete c.dataset.group;
       });
       cell.classList.add('active');
-      cell.dataset.group = currentGroupId; // 賦予與第一格相同的 ID，才能連成長音
+      cell.dataset.group = currentGroupId; 
     } else {
       cell.classList.remove('active');
       delete cell.dataset.group;
@@ -546,29 +574,28 @@
     dragStartNote = null;
   }
 
-  // --- 更新音符的連接狀態與文字表示 (加入群組比對) ---
+  // --- 更新音符的連接狀態 ---
   function updateTies() {
     cells.forEach(c => {
       c.classList.remove('tie-left', 'tie-right');
-      c.innerText = c.dataset.note; // 重置文字
+      c.innerText = c.dataset.note;
 
       if (c.classList.contains('active')) {
         const col = parseInt(c.dataset.col);
-        const groupId = c.dataset.group; // 取得該格子的 ID
+        const groupId = c.dataset.group;
         
-        // 尋找前一格或後一格，必須「音相同」且「群組 ID 相同」才會連接
         const prevCell = cells.find(x => parseInt(x.dataset.col) === col - 1 && x.dataset.note === c.dataset.note && x.dataset.group === groupId);
         const nextCell = cells.find(x => parseInt(x.dataset.col) === col + 1 && x.dataset.note === c.dataset.note && x.dataset.group === groupId);
         
         if (prevCell && prevCell.classList.contains('active')) {
             c.classList.add('tie-left');
-            c.innerText = '-'; // 連續畫出的才顯示橫線
+            c.innerText = '-'; 
         }
         if (nextCell && nextCell.classList.contains('active')) {
             c.classList.add('tie-right');
         }
       } else {
-        delete c.dataset.group; // 保險起見清除未啟動格子的 ID
+        delete c.dataset.group; 
       }
     });
   }
@@ -622,7 +649,6 @@
             let noteDurationBeats = 1;
             let currentCheckCol = step + 1;
             while(currentCheckCol < len) {
-              // 播放時也要檢查是否屬於同一個群組 ID
               const nextC = cells.find(x => parseInt(x.dataset.col) === currentCheckCol && x.dataset.note === c.dataset.note && x.dataset.group === c.dataset.group);
               if (nextC && nextC.classList.contains('active')) {
                 noteDurationBeats++;
@@ -682,7 +708,6 @@
             let noteDurationBeats = 1;
             let currentCheckCol = step + 1;
             while(currentCheckCol < len) {
-              // 導出時也要檢查群組 ID
               const nextC = cells.find(x => parseInt(x.dataset.col) === currentCheckCol && x.dataset.note === c.dataset.note && x.dataset.group === c.dataset.group);
               if (nextC && nextC.classList.contains('active')) {
                 noteDurationBeats++;
@@ -791,7 +816,6 @@
     btn.innerText = "上載中...";
     btn.disabled = true;
     
-    // 上傳時一同保存 Group ID
     const activeCellsData = cells.filter(c => c.classList.contains('active')).map(c => ({
       col: parseInt(c.dataset.col),
       note: c.dataset.note,
