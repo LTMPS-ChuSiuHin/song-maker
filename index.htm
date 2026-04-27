@@ -139,14 +139,24 @@
 
   /* --- 網格區域 --- */
   .grid-scroll-wrapper {
-    width: 100%; overflow-x: auto; padding-bottom: 15px; margin-bottom: 20px;
-    scrollbar-width: thin; scrollbar-color: var(--accent) transparent;
-    display: flex; justify-content: center;
+    width: 100%; 
+    overflow-x: auto; 
+    padding-bottom: 15px; 
+    margin-bottom: 20px;
+    scrollbar-width: thin; 
+    scrollbar-color: var(--accent) transparent;
+    /* 修正了超出版面時最左邊被切斷的問題：移除 justify-content: center */
     /* 確保手機滑動網格區塊的順暢度 */
     touch-action: pan-x; 
   }
 
-  #grid { display: grid; gap: 8px; width: max-content; }
+  #grid { 
+    display: grid; 
+    gap: 8px; 
+    width: max-content; 
+    /* 取代先前的 flex center，使用 margin 讓它小於螢幕時置中，大於螢幕時靠左排列 */
+    margin: 0 auto; 
+  }
 
   .cell {
     width: var(--cell-size); height: var(--cell-size);
@@ -467,7 +477,7 @@
         
         // 手機觸控事件 (點擊開始)
         cell.addEventListener('touchstart', (e) => {
-            e.preventDefault(); // 防止手機預設行為 (如畫面捲動)
+            e.preventDefault(); 
             startDrag(cell, e);
         }, { passive: false });
         
@@ -476,12 +486,10 @@
       }
     }
 
-    // 全域滑鼠與觸控結束事件
     window.addEventListener('mouseup', endDrag, { once: false });
     window.addEventListener('touchend', endDrag, { once: false });
     window.addEventListener('touchcancel', endDrag, { once: false });
 
-    // 載入先前的記錄
     if (savedCells) {
       savedCells.sort((a,b) => a.col - b.col);
       let lastNote = null;
@@ -511,10 +519,9 @@
   }
 
   // --- 觸控滑動繪圖核心 (Touch Move) ---
-  // 將 touchmove 綁定在 grid 上，並透過座標抓取當前手指下方的 cell
   gridEl.addEventListener('touchmove', (e) => {
     if (!isDragging) return;
-    e.preventDefault(); // 拖曳畫音符時防止畫面滾動
+    e.preventDefault(); 
 
     const touch = e.touches[0];
     const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
